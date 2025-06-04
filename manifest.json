@@ -1,0 +1,11 @@
+{
+  "name": "Meditation Timer",
+  "short_name": "Breathe",
+  "description": "A simple timer for guided breathing meditation.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#FAF0E6",
+  "theme_color": "#A0522D",
+  "orientation": "portrait-primary",
+  "icons": []
+}
