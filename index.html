@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
+    <title>Meditation Timer</title>
+    <style>
+        :root {
+            --bg-color: #FAF0E6; /* Light Cream */
+            --text-color: #5D4037; /* Dark Brown */
+            --accent-color: #A0522D; /* Sienna - a brownish accent */
+            --circle-color: #D2B48C; /* Tan - for the circle */
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-calligraphy: 'Georgia', 'Times New Roman', Times, serif; /* Simple, elegant serif */
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Prevent scrolling */
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-around;
+            padding: 20px;
+            height: 100%;
+            width: 100%;
+            max-width: 400px; /* Max width for larger screens, maintains mobile feel */
+        }
+
+        h1 {
+            font-family: var(--font-calligraphy);
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .circle-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 30px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible; /* Allow ripples to go outside if needed, though they are centered */
+        }
+
+        .circle {
+            width: 100px; /* Initial size */
+            height: 100px; /* Initial size */
+            background-color: var(--circle-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: width 15s linear, height 15s linear; /* Smoother linear transition */
+            z-index: 2; /* Ensure main circle is above ripples */
+            position: relative; /* For z-index to work properly with absolute positioned ripples */
+        }
+
+        .ripple {
+            position: absolute;
+            border: 2px solid var(--accent-color);
+            border-radius: 50%;
+            width: 100px; /* Start same size as circle's base */
+            height: 100px; /* Start same size as circle's base */
+            opacity: 0;
+            transform: scale(1);
+            animation: ripple-effect 2s linear;
+            z-index: 1; /* Behind main circle */
+            pointer-events: none; /* Ripples should not interfere with clicks */
+        }
+
+        @keyframes ripple-effect {
+            0% {
+                transform: scale(1);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(2.5); /* Ripple expands to 2.5x its initial size */
+                opacity: 0;
+            }
+        }
+
+
+        .timer-display {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--bg-color); /* Text color inside circle */
+        }
+
+        .phase-display {
+            margin-top: 10px;
+            font-size: 1.2em;
+            min-height: 1.5em; /* Reserve space to prevent layout shifts */
+            color: var(--accent-color);
+        }
+
+        .cycle-counter-display {
+            font-size: 1em;
+            color: var(--text-color);
+            margin-bottom: 15px; /* Space before buttons */
+            min-height: 1.2em;
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+        }
+
+        button {
+            padding: 15px 20px;
+            font-size: 1.1em;
+            font-family: var(--font-main);
+            background-color: var(--accent-color);
+            color: var(--bg-color);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #8B4513; /* Darker Sienna on hover */
+        }
+
+        button:disabled {
+            background-color: #C0C0C0; /* Grey out when disabled */
+            cursor: not-allowed;
+        }
+
+        audio {
+            display: none; /* Hide the default audio player */
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Breathe</h1>
+
+        <div class="circle-container" id="circleContainer">
+            <div class="circle" id="animationCircle">
+                <span class="timer-display" id="timerDisplay">15</span>
+            </div>
+            <!-- Ripples will be added here by JS -->
+        </div>
+        <div class="phase-display" id="phaseDisplay">Ready?</div>
+        <div class="cycle-counter-display" id="cycleCounterDisplay">Cycle: 0 / 31</div>
+
+        <div class="buttons-container">
+            <button id="testSoundBtn">Test Sound</button>
+            <button id="startMeditationBtn">Start Meditation</button>
+        </div>
+    </div>
+
+    <audio id="bellAudio" src="bell.mp3" preload="auto"></audio>
+
+    <script>
+        // JavaScript logic will go here
+        const circleContainer = document.getElementById('circleContainer');
+        const animationCircle = document.getElementById('animationCircle');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const phaseDisplay = document.getElementById('phaseDisplay');
+        const cycleCounterDisplay = document.getElementById('cycleCounterDisplay');
+        const testSoundBtn = document.getElementById('testSoundBtn');
+        const startMeditationBtn = document.getElementById('startMeditationBtn');
+        const bellAudio = document.getElementById('bellAudio');
+
+        const inhaleTime = 15; // seconds
+        const holdTime1 = 15; // seconds
+        const exhaleTime = 15; // seconds
+        const holdTime2 = 15; // seconds
+        const cycleDuration = inhaleTime + holdTime1 + exhaleTime + holdTime2; // 60 seconds
+        const totalCycles = 31; // 31 minutes
+        const totalMeditationTime = totalCycles * cycleDuration; // in seconds
+
+        let currentPhaseTime = 0;
+        let currentPhase = ''; // 'inhale', 'hold1', 'exhale', 'hold2'
+        let cyclesCompleted = 0;
+        let meditationInterval;
+        let countdownInterval;
+        let isMeditating = false;
+        let isInitialMeditationLoopCall = false; // Flag for the very first call to meditationLoop
+
+        // --- Audio Functions ---
+        async function playBell(times = 1, delayMs = 300) {
+            for (let i = 0; i < times; i++) {
+                bellAudio.currentTime = 0; // Rewind to start
+                try {
+                    await bellAudio.play();
+                } catch (error) {
+                    console.error("Error playing sound:", error);
+                    // Fallback for browsers requiring user interaction for first play
+                    if (i === 0) alert("Could not play audio. Please ensure your browser allows autoplay or interact with the page first.");
+                    return; // Stop trying if playback fails
+                }
+                if (times > 1 && i < times - 1) {
+                    await new Promise(resolve => setTimeout(resolve, bellAudio.duration * 1000 + delayMs));
+                }
+            }
+        }
+
+        testSoundBtn.addEventListener('click', () => {
+            testSoundBtn.disabled = true;
+            playBell(1).finally(() => {
+                testSoundBtn.disabled = false;
+            });
+        });
+
+        // --- Timer and Animation Functions ---
+        function updateTimerDisplay(time) {
+            timerDisplay.textContent = String(time).padStart(2, '0');
+        }
+
+        function updatePhaseDisplay(phaseText) {
+            phaseDisplay.textContent = phaseText;
+        }
+
+        function updateCycleDisplay(current, total) {
+            cycleCounterDisplay.textContent = `Cycle: ${current} / ${total}`;
+        }
+
+        function animateCircle(phase) {
+            const baseSize = 100; // px, must match initial CSS
+            const expandedSize = 200; // px, must match .circle-container size
+
+            // Clear existing ripples before creating new ones
+            const existingRipples = circleContainer.querySelectorAll('.ripple');
+            existingRipples.forEach(r => r.remove());
+
+            if (phase === 'inhale') {
+                animationCircle.style.width = `${expandedSize}px`;
+                animationCircle.style.height = `${expandedSize}px`;
+                createRipple();
+            } else if (phase === 'exhale') {
+                animationCircle.style.width = `${baseSize}px`;
+                animationCircle.style.height = `${baseSize}px`;
+                createRipple();
+            }
+            // For 'hold' phases, the size remains as it was from the previous phase.
+        }
+
+        function createRipple() {
+            const ripple = document.createElement('div');
+            ripple.classList.add('ripple');
+            // Set initial size based on the main circle's current state or a fixed value
+            // For simplicity, we use the baseSize for the ripple's starting dimensions
+            ripple.style.width = `${animationCircle.offsetWidth}px`;
+            ripple.style.height = `${animationCircle.offsetHeight}px`;
+            
+            circleContainer.appendChild(ripple);
+
+            // Remove ripple after animation finishes to prevent too many elements
+            ripple.addEventListener('animationend', () => {
+                if (ripple.parentNode) { // Check if still part of DOM
+                    ripple.remove();
+                }
+            });
+        }
+
+        function startCountdown(duration) {
+            currentPhaseTime = duration;
+            updateTimerDisplay(currentPhaseTime);
+
+            countdownInterval = setInterval(() => {
+                currentPhaseTime--;
+                updateTimerDisplay(currentPhaseTime);
+                if (currentPhaseTime <= 0) {
+                    clearInterval(countdownInterval);
+                    // Transition to next phase handled by meditationLoop
+                }
+            }, 1000);
+        }
+
+        function meditationLoop() {
+            clearInterval(countdownInterval); // Clear previous countdown if any
+
+            if (cyclesCompleted >= totalCycles) {
+                endMeditation();
+                return;
+            }
+
+            // Determine current phase
+            const timeIntoCurrentCycle = (Date.now() - meditationStartTime) / 1000 % cycleDuration;
+
+            if (currentPhase === '' || currentPhase === 'hold2') { // Start of a new cycle or after hold2
+                // If currentPhase was 'hold2', a cycle just completed.
+                // cyclesCompleted would have been incremented at the end of that 'hold2' phase.
+                // So, we are now starting cycle number 'cyclesCompleted + 1'.
+                if (isMeditating) { // Only update if meditation is active
+                    updateCycleDisplay(cyclesCompleted + 1, totalCycles);
+                }
+                currentPhase = 'inhale';
+                updatePhaseDisplay('Inhale');
+                animateCircle('inhale');
+                if (!isInitialMeditationLoopCall) { // Only play bell if not the very first setup
+                    playBell(1);
+                }
+                startCountdown(inhaleTime);
+            } else if (currentPhase === 'inhale') {
+                currentPhase = 'hold1';
+                updatePhaseDisplay('Hold');
+                animateCircle('hold1'); // No size change, but function called for consistency
+                playBell(1);
+                startCountdown(holdTime1);
+            } else if (currentPhase === 'hold1') {
+                currentPhase = 'exhale';
+                updatePhaseDisplay('Exhale');
+                animateCircle('exhale');
+                playBell(1);
+                startCountdown(exhaleTime);
+            } else if (currentPhase === 'exhale') {
+                currentPhase = 'hold2';
+                updatePhaseDisplay('Hold');
+                animateCircle('hold2'); // No size change
+                playBell(1);
+                startCountdown(holdTime2);
+                cyclesCompleted++; // Increment after the full cycle (or rather, before starting next inhale)
+            }
+        }
+
+        let meditationStartTime;
+
+        function startMeditation() {
+            if (isMeditating) return;
+            isMeditating = true;
+            startMeditationBtn.disabled = true;
+            testSoundBtn.disabled = true;
+            updatePhaseDisplay('Get Ready...');
+            cyclesCompleted = 0;
+            updateCycleDisplay(cyclesCompleted + 1, totalCycles); // Show Cycle 1/31
+            currentPhase = ''; // Reset phase to ensure 'inhale' starts first
+
+            playBell(2, 500).then(() => { // Play bell twice
+                if (!isMeditating) return; // Check if meditation was cancelled during bell play
+                meditationStartTime = Date.now();
+                
+                isInitialMeditationLoopCall = true; // Set flag for the first direct call
+                meditationLoop(); // Start the first phase (inhale) - this call will not play its own bell
+                isInitialMeditationLoopCall = false; // Reset flag
+
+                // Interval starts 15s later for the transition from inhale to hold1
+                meditationInterval = setInterval(meditationLoop, 15 * 1000);
+            });
+        }
+
+        function endMeditation() {
+            isMeditating = false;
+            clearInterval(meditationInterval);
+            clearInterval(countdownInterval);
+            updatePhaseDisplay('Meditation Complete!');
+            updateTimerDisplay('00');
+            playBell(4, 400).finally(() => { // Play bell four times
+                startMeditationBtn.disabled = false;
+                testSoundBtn.disabled = false;
+                // Reset circle to initial state if needed
+                animationCircle.style.width = `100px`;
+                animationCircle.style.height = `100px`;
+                timerDisplay.textContent = "15"; // Reset timer display
+                phaseDisplay.textContent = "Ready?";
+                updateCycleDisplay(0, totalCycles); // Reset cycle display
+            });
+            cyclesCompleted = 0;
+            currentPhase = '';
+        }
+
+        startMeditationBtn.addEventListener('click', startMeditation);
+
+        // Initial setup
+        updateTimerDisplay(inhaleTime);
+        updatePhaseDisplay('Ready?');
+        updateCycleDisplay(0, totalCycles); // Initial cycle display
+
+        // Prevent pull-to-refresh and other touch gestures that might interfere
+        document.body.addEventListener('touchmove', function(event) {
+            event.preventDefault();
+        }, { passive: false });
+
+    </script>
+</body>
+</html>
