@@ -1,7 +1,7 @@
 {
-  "name": "Meditation Timer",
-  "short_name": "Breathe",
-  "description": "A simple timer for guided breathing meditation.",
+  "name": "Chandra Bhedana Timer",
+  "short_name": "CB Timer",
+  "description": "A timer for Chandra Bhedana Pranayama (31 minutes).",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#FAF0E6",
