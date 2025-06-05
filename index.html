@@ -73,7 +73,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: width 15s linear, height 15s linear; /* Smoother linear transition */
+            /* transition: width 15s linear, height 15s linear; */ /* Will be set by JS */
             z-index: 2; /* Ensure main circle is above ripples */
             position: relative; /* For z-index to work properly with absolute positioned ripples */
         }
@@ -128,6 +128,7 @@
             flex-direction: column;
             gap: 15px;
             width: 80%;
+            margin-bottom: 10px; /* Space before duration options */
         }
 
         button {
@@ -156,6 +157,26 @@
         }
 
     </style>
+    <style> /* Additional styles for duration options */
+        .duration-options {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px; /* Space before test sound button */
+            align-items: center;
+        }
+        .duration-options label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 1em;
+            color: var(--text-color);
+        }
+        .duration-options input[type="radio"] {
+            margin-right: 5px;
+            accent-color: var(--accent-color); /* Style the radio button itself */
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -163,13 +184,19 @@
 
         <div class="circle-container" id="circleContainer">
             <div class="circle" id="animationCircle">
-                <span class="timer-display" id="timerDisplay">15</span>
+                <span class="timer-display" id="timerDisplay">05</span>
             </div>
             <!-- Ripples will be added here by JS -->
         </div>
         <div class="phase-display" id="phaseDisplay">Ready?</div>
         <div class="cycle-counter-display" id="cycleCounterDisplay">Cycle: 0 / 31</div>
         <a href="chandra-bhedana-info.html" style="margin-top: 10px; font-size: 0.9em; color: var(--accent-color);">What is Chandra Bhedana?</a>
+
+        <div class="duration-options">
+            <label><input type="radio" name="duration" value="5" id="duration5" checked> 5s</label>
+            <label><input type="radio" name="duration" value="10" id="duration10"> 10s</label>
+            <label><input type="radio" name="duration" value="15" id="duration15"> 15s</label>
+        </div>
 
         <div class="buttons-container">
             <button id="testSoundBtn">Test Sound</button>
@@ -180,7 +207,6 @@
     <audio id="bellAudio" src="bell.mp3" preload="auto"></audio>
 
     <script>
-        // JavaScript logic will go here
         const circleContainer = document.getElementById('circleContainer');
         const animationCircle = document.getElementById('animationCircle');
         const timerDisplay = document.getElementById('timerDisplay');
@@ -189,37 +215,61 @@
         const testSoundBtn = document.getElementById('testSoundBtn');
         const startMeditationBtn = document.getElementById('startMeditationBtn');
         const bellAudio = document.getElementById('bellAudio');
+        const durationRadios = document.querySelectorAll('input[name="duration"]');
 
-        const inhaleTime = 15; // seconds
-        const holdTime1 = 15; // seconds
-        const exhaleTime = 15; // seconds
-        const holdTime2 = 15; // seconds
-        const cycleDuration = inhaleTime + holdTime1 + exhaleTime + holdTime2; // 60 seconds
-        const totalCycles = 31; // 31 minutes
-        const totalMeditationTime = totalCycles * cycleDuration; // in seconds
+        let selectedTimerDuration = 5; // Default to 5 seconds
+
+        let inhaleTime = 5; // seconds
+        let holdTime1 = 5; // seconds
+        let exhaleTime = 5; // seconds
+        let holdTime2 = 5; // seconds
+        let cycleDuration = inhaleTime + holdTime1 + exhaleTime + holdTime2;
+        let totalCycles = 31; // Will be calculated dynamically
 
         let currentPhaseTime = 0;
         let currentPhase = ''; // 'inhale', 'hold1', 'exhale', 'hold2'
         let cyclesCompleted = 0;
-        let meditationInterval;
+        let meditationLoopTimeoutId;
         let countdownInterval;
         let isMeditating = false;
-        let isInitialMeditationLoopCall = false; // Flag for the very first call to meditationLoop
+        let isInitialMeditationLoopCall = false;
+
+        function updateAllPhaseDurations(duration) {
+            inhaleTime = duration;
+            holdTime1 = duration;
+            exhaleTime = duration;
+            holdTime2 = duration;
+            cycleDuration = inhaleTime + holdTime1 + exhaleTime + holdTime2;
+        }
+
+        function calculateAndUpdateTotalCycles() {
+            const targetTotalMeditationSeconds = 31 * 60; // 31 minutes
+            if (cycleDuration > 0) {
+                totalCycles = Math.round(targetTotalMeditationSeconds / cycleDuration);
+            } else {
+                totalCycles = 31; // Fallback to default if cycleDuration is somehow 0
+            }
+        }
 
         // --- Audio Functions ---
         async function playBell(times = 1, delayMs = 300) {
             for (let i = 0; i < times; i++) {
-                bellAudio.currentTime = 0; // Rewind to start
+                bellAudio.currentTime = 0;
                 try {
                     await bellAudio.play();
                 } catch (error) {
                     console.error("Error playing sound:", error);
-                    // Fallback for browsers requiring user interaction for first play
-                    if (i === 0) alert("Could not play audio. Please ensure your browser allows autoplay or interact with the page first.");
-                    return; // Stop trying if playback fails
+                    if (i === 0 && !isMeditating) alert("Could not play audio. Please ensure your browser allows autoplay or interact with the page first.");
+                    return;
                 }
                 if (times > 1 && i < times - 1) {
-                    await new Promise(resolve => setTimeout(resolve, bellAudio.duration * 1000 + delayMs));
+                    const audioDuration = bellAudio.duration;
+                    if (isFinite(audioDuration) && audioDuration > 0) {
+                        await new Promise(resolve => setTimeout(resolve, audioDuration * 1000 + delayMs));
+                    } else {
+                        // Fallback if duration is not available (e.g., wait for a fixed time like 1s)
+                        await new Promise(resolve => setTimeout(resolve, 1000 + delayMs));
+                    }
                 }
             }
         }
@@ -245,9 +295,19 @@
         }
 
         function animateCircle(phase) {
-            const baseSize = 100; // px, must match initial CSS
-            const expandedSize = 200; // px, must match .circle-container size
+            const baseSize = 100;
+            const expandedSize = 200;
 
+            let animationPhaseDuration = 0;
+            if (phase === 'inhale') animationPhaseDuration = inhaleTime;
+            else if (phase === 'exhale') animationPhaseDuration = exhaleTime;
+
+            if (animationPhaseDuration > 0) {
+                animationCircle.style.transition = `width ${animationPhaseDuration}s linear, height ${animationPhaseDuration}s linear`;
+            } else {
+                animationCircle.style.transition = 'none';
+            }
+            
             // Clear existing ripples before creating new ones
             const existingRipples = circleContainer.querySelectorAll('.ripple');
             existingRipples.forEach(r => r.remove());
@@ -261,7 +321,7 @@
                 animationCircle.style.height = `${baseSize}px`;
                 createRipple();
             }
-            // For 'hold' phases, the size remains as it was from the previous phase.
+            // For 'hold' phases, size remains, transition is 'none'.
         }
 
         function createRipple() {
@@ -296,102 +356,154 @@
             }, 1000);
         }
 
-        function meditationLoop() {
-            clearInterval(countdownInterval); // Clear previous countdown if any
+        function scheduleNextPhase(duration) {
+            clearTimeout(meditationLoopTimeoutId);
+            if (isMeditating) { // Only schedule if still meditating
+                meditationLoopTimeoutId = setTimeout(meditationLoop, duration * 1000);
+            }
+        }
 
-            if (cyclesCompleted >= totalCycles) {
+        function meditationLoop() {
+            clearInterval(countdownInterval);
+
+            if (cyclesCompleted >= totalCycles && isMeditating) { // Ensure isMeditating to prevent multiple end calls
                 endMeditation();
                 return;
             }
+            if (!isMeditating) return; // Stop if meditation was cancelled
 
-            // Determine current phase
-            const timeIntoCurrentCycle = (Date.now() - meditationStartTime) / 1000 % cycleDuration;
+            let nextPhaseDuration;
 
-            if (currentPhase === '' || currentPhase === 'hold2') { // Start of a new cycle or after hold2
-                // If currentPhase was 'hold2', a cycle just completed.
-                // cyclesCompleted would have been incremented at the end of that 'hold2' phase.
-                // So, we are now starting cycle number 'cyclesCompleted + 1'.
-                if (isMeditating) { // Only update if meditation is active
+            if (currentPhase === '' || currentPhase === 'hold2') {
+                if (currentPhase === 'hold2' && !isInitialMeditationLoopCall) {
+                    // This means a full cycle (I-H-E-H) just finished.
+                    // cyclesCompleted was already incremented at the end of 'exhale' phase logic.
+                }
+                 // For the very first call (currentPhase === ''), or after hold2.
+                if (isMeditating) {
                     updateCycleDisplay(cyclesCompleted + 1, totalCycles);
                 }
                 currentPhase = 'inhale';
                 updatePhaseDisplay('Inhale');
                 animateCircle('inhale');
-                if (!isInitialMeditationLoopCall) { // Only play bell if not the very first setup
+                if (!isInitialMeditationLoopCall) {
                     playBell(1);
                 }
                 startCountdown(inhaleTime);
+                nextPhaseDuration = inhaleTime;
             } else if (currentPhase === 'inhale') {
                 currentPhase = 'hold1';
                 updatePhaseDisplay('Hold');
-                animateCircle('hold1'); // No size change, but function called for consistency
+                animateCircle('hold1');
                 playBell(1);
                 startCountdown(holdTime1);
+                nextPhaseDuration = holdTime1;
             } else if (currentPhase === 'hold1') {
                 currentPhase = 'exhale';
                 updatePhaseDisplay('Exhale');
                 animateCircle('exhale');
                 playBell(1);
                 startCountdown(exhaleTime);
+                nextPhaseDuration = exhaleTime;
             } else if (currentPhase === 'exhale') {
                 currentPhase = 'hold2';
                 updatePhaseDisplay('Hold');
-                animateCircle('hold2'); // No size change
+                animateCircle('hold2');
                 playBell(1);
                 startCountdown(holdTime2);
-                cyclesCompleted++; // Increment after the full cycle (or rather, before starting next inhale)
+                cyclesCompleted++;
+                nextPhaseDuration = holdTime2;
+            }
+
+            if (isMeditating) {
+                 scheduleNextPhase(nextPhaseDuration);
             }
         }
 
-        let meditationStartTime;
+        let meditationStartTime; // Keep for potential future use, though not driving phase changes
 
         function startMeditation() {
             if (isMeditating) return;
             isMeditating = true;
-            startMeditationBtn.disabled = true;
+            startMeditationBtn.textContent = 'Stop Meditation';
+            startMeditationBtn.removeEventListener('click', startMeditation);
+            startMeditationBtn.addEventListener('click', endMeditation); // Change to stop
+
             testSoundBtn.disabled = true;
+            durationRadios.forEach(radio => radio.disabled = true);
+
             updatePhaseDisplay('Get Ready...');
             cyclesCompleted = 0;
-            updateCycleDisplay(cyclesCompleted + 1, totalCycles); // Show Cycle 1/31
-            currentPhase = ''; // Reset phase to ensure 'inhale' starts first
+            updateCycleDisplay(cyclesCompleted + 1, totalCycles);
+            currentPhase = '';
 
-            playBell(2, 500).then(() => { // Play bell twice
-                if (!isMeditating) return; // Check if meditation was cancelled during bell play
+            playBell(2, 500).then(() => {
+                if (!isMeditating) return;
                 meditationStartTime = Date.now();
                 
-                isInitialMeditationLoopCall = true; // Set flag for the first direct call
-                meditationLoop(); // Start the first phase (inhale) - this call will not play its own bell
-                isInitialMeditationLoopCall = false; // Reset flag
-
-                // Interval starts 15s later for the transition from inhale to hold1
-                meditationInterval = setInterval(meditationLoop, 15 * 1000);
+                isInitialMeditationLoopCall = true;
+                meditationLoop();
+                isInitialMeditationLoopCall = false;
             });
         }
 
         function endMeditation() {
-            isMeditating = false;
-            clearInterval(meditationInterval);
-            clearInterval(countdownInterval);
-            updatePhaseDisplay('Meditation Complete!');
-            updateTimerDisplay('00');
-            playBell(4, 400).finally(() => { // Play bell four times
-                startMeditationBtn.disabled = false;
-                testSoundBtn.disabled = false;
-                // Reset circle to initial state if needed
-                animationCircle.style.width = `100px`;
-                animationCircle.style.height = `100px`;
-                timerDisplay.textContent = "15"; // Reset timer display
-                phaseDisplay.textContent = "Ready?";
-                updateCycleDisplay(0, totalCycles); // Reset cycle display
-            });
-            cyclesCompleted = 0;
-            currentPhase = '';
-        }
+            if (!isMeditating && startMeditationBtn.textContent !== 'Stop Meditation') return; // Avoid accidental calls if already stopped
 
+            isMeditating = false;
+            clearTimeout(meditationLoopTimeoutId);
+            clearInterval(countdownInterval);
+            
+            const wasMeditating = startMeditationBtn.textContent === 'Stop Meditation';
+
+            startMeditationBtn.textContent = 'Start Meditation';
+            startMeditationBtn.removeEventListener('click', endMeditation);
+            startMeditationBtn.addEventListener('click', startMeditation);
+
+            startMeditationBtn.disabled = false;
+            testSoundBtn.disabled = false;
+            durationRadios.forEach(radio => radio.disabled = false);
+            
+            if (wasMeditating) { // Only play ending bells if meditation was actually stopped by user or completed
+                updatePhaseDisplay('Meditation Complete!');
+                playBell(4, 400);
+            } else {
+                 updatePhaseDisplay('Ready?'); // If stopped before starting or by changing duration
+            }
+            
+            updateTimerDisplay(String(inhaleTime).padStart(2, '0')); // Reset to current selected duration
+            animationCircle.style.transition = 'none';
+            animationCircle.style.width = `100px`;
+            animationCircle.style.height = `100px`;
+            updateCycleDisplay(0, totalCycles);
+            
+            currentPhase = ''; // Reset for next start
+        }
+        
         startMeditationBtn.addEventListener('click', startMeditation);
 
+        durationRadios.forEach(radio => {
+            radio.addEventListener('change', (event) => {
+                const newDuration = parseInt(event.target.value);
+                selectedTimerDuration = newDuration;
+                updateAllPhaseDurations(selectedTimerDuration);
+                calculateAndUpdateTotalCycles(); // Recalculate total cycles
+
+                if (!isMeditating) {
+                    updateTimerDisplay(String(inhaleTime).padStart(2,'0'));
+                    phaseDisplay.textContent = "Ready?";
+                    updateCycleDisplay(0, totalCycles); // Use the new totalCycles
+                    animationCircle.style.transition = 'none';
+                    animationCircle.style.width = '100px';
+                    animationCircle.style.height = '100px';
+                }
+            });
+        });
+
         // Initial setup
-        updateTimerDisplay(inhaleTime);
+        updateAllPhaseDurations(selectedTimerDuration); // Set initial durations based on default 5s
+        calculateAndUpdateTotalCycles(); // Calculate initial total cycles
+        updateTimerDisplay(String(inhaleTime).padStart(2,'0'));
         updatePhaseDisplay('Ready?');
         updateCycleDisplay(0, totalCycles); // Initial cycle display
 
